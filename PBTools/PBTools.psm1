@@ -11,8 +11,8 @@ function New-CSVADUser {
         specifies a file which errors are written to.
     .PARAMETER LogErrors
         Specifies if Errors are logged to a file, by defalt loggs are saved to C:\Errors.txt.       
-    .PARAMETER Path
-        Specifies the Path to the Csv File. defaults to current path users.csv.
+    .PARAMETER FilePath
+        Specifies the File Path to the Csv File. defaults to current directory\ users.csv.
     .PARAMETER Credential
         If set New-CSVADUser prompt you for username and password, the same credentials are used on all computers.        
     .PARAMETER Force
@@ -20,18 +20,24 @@ function New-CSVADUser {
         ID column must be present in order to work, by default User name is the first character of the first name and last name.
     .PARAMETER Password
         Sets the Password for all the user's accounts, by default it is username Plus P@ssw0rd!. FYI user is required to change password upon login.
+    .PARAMETER PasswordField
+        Sets if you have a Password field on the CSV for each users.
+    .PARAMETER DontRequirePasswordChange
+        Sets if you don't want the users to have to change their on login.
+    .PARAMETER Path
+        Sets the path PARAMETER  must formated exactly like this 'DC=<your domain>,DC=<your top level domain>' (This is how you make all the users in a certain OU)
     .EXAMPLE
         PS C:\> New-CSVADUser -ComputerName 'localhost'
-        Will Run New-CSVADUser on the local Computer with the path to the CSV file being C:\users.csv
+        Will Run New-CSVADUser on the local Computer with the File Path to the CSV file being C:\users.csv
     .EXAMPLE
-        PS C:\> New-CSVADUser -ComputerName 'localhost' -path 'E:\UsersToBeAdded' 
-        Will Run New-CSVADUser on the local Computer with the path to the CSV file being E:\UsersToBeAdded
+        PS C:\> New-CSVADUser -ComputerName 'localhost' -FilePath 'E:\UsersToBeAdded' 
+        Will Run New-CSVADUser on the local Computer with the FilePath to the CSV file being E:\UsersToBeAdded
     .EXAMPLE
         PS C:\> New-CSVADUser -ComputerName 'localhost' -LogErrors -Errorlog 'E:\CSVADUser-ErrorsLog.txt'
-        Will Run New-CSVADUser on the local Computer with the path to the CSV file being C:\users.csv
+        Will Run New-CSVADUser on the local Computer with the File Path to the CSV file being C:\users.csv
     .NOTES
         The CSV file must have these columns: First, Last
-        Optional columns: Middle, Suffix, Department, Email, ID
+        Optional columns: Middle, Suffix, Department, Email, ID, Password
         The Department column Will be used as the group that the user is in.
         The ID column must be present if using the Force parameter.
         By default User name is the first character of the first name and last name.
@@ -46,14 +52,15 @@ function New-CSVADUser {
         [parameter(ValueFromPipeline=$True, Mandatory=$True)]
         [ValidateNotNullOrEmpty()]
         [string[]] $ComputerName,
-        [string] $Path = '.\users.csv',
+        [string] $FilePath = '.\users.csv',
         [string] $Errorlog = 'C:\Errors.txt',
+        [string] $path = $null,
         [string] $Password = 'P@ssw0rd!',
+        [switch] $Passwordfield,
+        [switch] $DontRequirePasswordChange,
         [switch] $LogErrors,
         [switch] $Credential,
-        [switch] $Force
-
-        
+        [switch] $Force  
     )
     begin {
     }
@@ -62,18 +69,8 @@ function New-CSVADUser {
         if ($LogErrors) {
             Write-Output  "New-CSVADUser Error Log `n    Ran At $(Get-Date -Format g) Local Time`n`n`n" | Out-File $Errorlog -Append
         }
-        Try{
-            $users = Import-Csv $path  -ErrorAction Stop
-            Write-Verbose "Getting CSV File"
-        }
-        Catch{
-            Write-Error "Could not load CSV file, please check typed path: $path"
-            if ($LogErrors){
-                Write-Output "Could not load CSV file, please check typed path: $path" | out-file $Errorlog -Append
-                Write-Host -ForegroundColor Green "Error Has been logged to $Errorlog"
-            }
-            exit
-        }
+
+
         Write-Verbose 'Loaded CSV File'
         :Computerloop
         foreach ($Computer in $ComputerName){
@@ -154,7 +151,11 @@ function New-CSVADUser {
                 $UserName  = ($($User.First).SubString(0,1)) + ($User.Last)
                 $FullName = (($user.first) + ' ' + ($user.Middle) + ' ' + ($user.Last) + ' ' + ($user.Suffix))
                 $GroupName = $user.Department
-                $Userpassword =  "$Password" | ConvertTo-SecureString  -AsPlainText -Force
+                if ($Passwordfield){
+                    $Userpassword =  $user.password | ConvertTo-SecureString  -AsPlainText -Force
+                }else {
+                    $Userpassword =  "$Password" | ConvertTo-SecureString  -AsPlainText -Force
+                }
                 $UserPram = $null
 
                 Check-UserName #Functions#####
@@ -192,9 +193,16 @@ function New-CSVADUser {
 
 
                 Write-Verbose "Setting up Users AD Prammters"
+                
+                if ($DontRequirePasswordChange){
+                    $ChangePasswordAtLogon = $false
+                }else {
+                    $ChangePasswordAtLogon = $True
+                }
+                
 
                 $UserPram = @{
-                    ChangePasswordAtLogon = $true;
+                    ChangePasswordAtLogon = $ChangePasswordAtLogon;
                     AccountPassword = $UserPassword
                 }
                 if (-not ([string]::IsNullOrEmpty($GroupName))) {
@@ -219,6 +227,9 @@ function New-CSVADUser {
                 }
                 if (-not ([string]::IsNullOrEmpty($user.Email))) {
                     $UserPram += @{EmailAddress = $user.Email} 
+                }
+                if (-not ([string]::IsNullOrEmpty($path))) {
+                    $UserPram += @{Path = $Path} 
                 }
                 #Invoke-Command -Session $Session -ScriptBlock  {$UserPram}
                 
@@ -288,19 +299,19 @@ function Remove-CSVADUser {
         specifies a file which errors are written to.
     .PARAMETER LogErrors
         Specifies if Errors are logged to a file, by defalt loggs are saved to C:\Errors.txt.       
-    .PARAMETER Path
-        Specifies the Path to the CSV File. defaults to current path users.csv.
+    .PARAMETER FilePath
+        Specifies the File Path to the CSV File. defaults to current directory. users.csv.
     .PARAMETER Credential
         If set Remove-CSVADUser will prompt you for username and password, the same credentials are used on all computers.        
     .EXAMPLE
         PS C:\> Remove-CSVADUser -ComputerName 'localhost'
-        Will Run New-CSVADUser on the local Computer with the path to the CSV file being C:\users.csv
+        Will Run New-CSVADUser on the local Computer with the File Path to the CSV file being C:\users.csv
     .EXAMPLE
-        PS C:\> Remove-CSVADUser -ComputerName 'localhost' -path 'E:\UsersToBeRemoved' 
-        Will Run Remove-CSVADUser on the local Computer with the path to the CSV file being E:\UsersToBeRemoved
+        PS C:\> Remove-CSVADUser -ComputerName 'localhost' -FilePath 'E:\UsersToBeRemoved' 
+        Will Run Remove-CSVADUser on the local Computer with the FilePath to the CSV file being E:\UsersToBeRemoved
     .EXAMPLE
         PS C:\> Remove-CSVADUser -ComputerName 'localhost' -LogErrors -Errorlog 'E:\CSVADUser-ErrorsLog.txt'
-        Will Run Remove-CSVADUser on the local Computer with the path to the CSV file being C:\users.csv
+        Will Run Remove-CSVADUser on the local Computer with the FilePath to the CSV file being C:\users.csv
     .NOTES
         The CSV file must have these columns: Username or both aFirst, and Last
         PS sessions must be enable and working on the server duh.
@@ -311,7 +322,7 @@ function Remove-CSVADUser {
         [parameter(ValueFromPipeline=$True, Mandatory=$True)]
         [ValidateNotNullOrEmpty()]
         [string[]] $ComputerName,
-        [string] $Path = '.\users.csv',
+        [string] $FilePath = '.\users.csv',
         [string] $Errorlog = 'C:\Errors.txt',
         [switch] $LogErrors,
         [switch] $Credential
@@ -326,13 +337,13 @@ function Remove-CSVADUser {
             Write-Output  "New-CSVADUser Error Log `n    Ran At $(Get-Date -Format g) Local Time`n`n`n" | Out-File $Errorlog -Append
         }
         Try{
-            $users = Import-Csv $path  -ErrorAction Stop
+            $users = Import-Csv $FilePath  -ErrorAction Stop
             Write-Verbose "Getting CSV File"
         }
         Catch{
-            Write-Error "Could not load CSV file, please check typed path: $path"
+            Write-Error "Could not load CSV file, please check FilePath parameter: $FilePath"
             if ($LogErrors){
-                Write-Output "Could not load CSV file, please check typed path: $path" | out-file $Errorlog -Append
+                Write-Output "Could not load CSV file, please check FilePath parameter: $FilePath" | out-file $Errorlog -Append
                 Write-Host -ForegroundColor Green "Error Has been logged to $Errorlog"
             }
             exit
