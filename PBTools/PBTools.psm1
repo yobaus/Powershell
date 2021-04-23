@@ -313,7 +313,7 @@ function Remove-CSVADUser {
         PS C:\> Remove-CSVADUser -ComputerName 'localhost' -LogErrors -Errorlog 'E:\CSVADUser-ErrorsLog.txt'
         Will Run Remove-CSVADUser on the local Computer with the FilePath to the CSV file being C:\users.csv
     .NOTES
-        The CSV file must have these columns: Username or both aFirst, and Last
+        The CSV file must have these columns: Username or both a First, and Last
         PS sessions must be enable and working on the server duh.
 
     #>
