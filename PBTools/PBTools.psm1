@@ -69,7 +69,18 @@ function New-CSVADUser {
         if ($LogErrors) {
             Write-Output  "New-CSVADUser Error Log `n    Ran At $(Get-Date -Format g) Local Time`n`n`n" | Out-File $Errorlog -Append
         }
-
+        Try{
+            $users = Import-Csv $filepath  -ErrorAction Stop
+            Write-Verbose "Getting CSV File"
+        }
+        Catch{
+            Write-Error "Could not load CSV file, please check typed path: $filepath"
+            if ($LogErrors){
+                Write-Output "Could not load CSV file, please check typed path: $filepath" | out-file $Errorlog -Append
+                Write-Host -ForegroundColor Green "Error Has been logged to $Errorlog"
+            }
+            exit
+        }
 
         Write-Verbose 'Loaded CSV File'
         :Computerloop
